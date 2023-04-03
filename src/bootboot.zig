@@ -84,7 +84,7 @@ pub const BOOTBOOT = extern struct {
     magic: [4]u8 align(1),
     size: u32 align(1),
     protocol: u8 align(1),
-    fb_type: u8 align(1),
+    fb_type: FramebufferFormat align(1),
     numcores: u16 align(1),
     bspid: u16 align(1),
     timezone: i16 align(1),

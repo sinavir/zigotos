@@ -1,4 +1,9 @@
-const bootboot = @import("bootboot.zig");
+//   console.zig -- screen driver
+//
+//   Handles all screen drawing stuff but not terminal management
+
+const bootboot = @import("../bootboot.zig");
+const std = @import("std");
 
 const PsfHeader = packed struct {
     magic: u32, // magic bytes to identify PSF
@@ -38,17 +43,36 @@ const Fontspec = struct {
     bytes_per_line: usize,
 };
 
+const Pixel = packed struct {
+    blue: u8,
+    green: u8,
+    red: u8,
+    alpha: u8 = 0,
+    const WHITE = Pixel{
+        .red = 0xff,
+        .green = 0xff,
+        .blue = 0xff,
+    };
+    const BLACK = Pixel{
+        .red = 0x00,
+        .green = 0x00,
+        .blue = 0x00,
+    };
+};
+
 const font = getGlyphs("font.psf");
 
-extern var fb: u8; // frame buffer address pub var framebuffer: []u32 = undefined;
-pub var framebuffer: []u32 = undefined;
+extern var fb: u8;
+pub var framebuffer: []Pixel = undefined;
 var boot_info: bootboot.BOOTBOOT = undefined;
 var scanline: u32 = undefined;
 
 // init console
 pub fn init() void {
     boot_info = bootboot.boot_info;
-    framebuffer = @intToPtr([*]u32, @ptrToInt(&fb))[0..boot_info.fb_size];
+    if (boot_info.fb_type != bootboot.FramebufferFormat.ARGB) std.debug.panic("Invalid frame buffer format {any}", .{boot_info.fb_type});
+
+    framebuffer = @intToPtr([*]Pixel, @ptrToInt(&fb))[0..boot_info.fb_size];
     scanline = boot_info.fb_scanline / 4; // fb_scanline is a byte offset. We want 32bits offsets
 }
 
@@ -64,7 +88,7 @@ pub fn putCharAt(x: usize, y: usize, c: u8) void {
             j = 0;
             mask = 0x80;
             while (j < font.gw) : (j += 1) {
-                framebuffer[buf_offset + i * scanline + j] = if (font.glyphs[char_offset + offset] & mask == 0) 0 else 0x00ffffff;
+                framebuffer[buf_offset + i * scanline + j] = if (font.glyphs[char_offset + offset] & mask == 0) Pixel.BLACK else Pixel.WHITE;
                 mask >>= 1;
                 if (mask == 0) {
                     offset += 1;
@@ -76,7 +100,7 @@ pub fn putCharAt(x: usize, y: usize, c: u8) void {
     }
 }
 
-const Cursor = struct {
-    x: usize = 0,
-    y: usize = 0,
-};
+pub fn scroll(y_scroll: usize) void {
+    var delta = scanline * y_scroll;
+    for (framebuffer[0..(boot_info.fb_width * boot_info.fb_height - delta)]) |*d, idx| d.* = framebuffer[idx + delta];
+}

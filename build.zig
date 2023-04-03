@@ -58,6 +58,8 @@ pub fn build(b: *std.build.Builder) void {
         "qemu-system-x86_64",
         "-cdrom",
         iso_out_path,
+        "-serial",
+        "stdio",
         "-m",
         "4G",
     };

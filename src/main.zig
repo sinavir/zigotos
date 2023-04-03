@@ -1,30 +1,21 @@
-const console = @import("console.zig");
 const std = @import("std");
 
-const ALIGN = 1 << 0;
-const MEMINFO = 1 << 1;
-const MAGIC = 0x1BADB002;
-const FLAGS = ALIGN | MEMINFO;
+const bootboot = @import("bootboot.zig");
 
-const MultibootHeader = extern struct {
-    magic: i32 = MAGIC,
-    flags: i32,
-    checksum: i32,
-};
+const console = @import("console.zig");
 
-pub export var multiboot align(4) linksection(".text.multiboot") = MultibootHeader{
-    .flags = FLAGS,
-    .checksum = -(MAGIC + FLAGS),
-};
-
-export var stack_bytes: [16 * 8192]u8 align(16) linksection(".bss") = undefined;
-
-export fn kmain() callconv(.C) noreturn {
-    console.puts("Hello world!\nWelcome to zigotos");
+// Entry point, called by BOOTBOOT Loader
+export fn _start() callconv(.Naked) noreturn {
+    console.init();
+    var i: u16 = 0;
+    var j: u16 = 0;
+    while (j < 26 * 6) : (j += 1) {
+        console.putCharAt(j * 8, i * 16, 'A' + @truncate(u8, (i + j) % 26));
+    }
     while (true) {}
 }
 
-pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
-    console.puts(message);
+pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    for (msg) |i, idx| console.putCharAt(idx * 8, 0, i);
     while (true) {}
 }

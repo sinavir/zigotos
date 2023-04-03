@@ -1,0 +1,10 @@
+{
+    "diskguid": "00000000-0000-0000-0000-000000000000",
+    "disksize": 128,
+    "initrd": { "type": "tar", "gzip": true, "directory": "zig-cache/initrd" },
+    "config": "env-config",
+    "iso9660": 1,
+    "partitions": [
+        { "type": "fat32", "size": 16 }
+    ]
+}

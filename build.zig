@@ -1,82 +1,63 @@
 const std = @import("std");
-const Builder = @import("std").build.Builder;
-const Target = @import("std").Target;
-const CrossTarget = @import("std").zig.CrossTarget;
-const Feature = @import("std").Target.Cpu.Feature;
 
-pub fn build(b: *Builder) void {
-    const target = CrossTarget{
-        .cpu_arch = Target.Cpu.Arch.i386,
-        .os_tag = Target.Os.Tag.freestanding,
-        .abi = Target.Abi.none,
+pub fn build(b: *std.build.Builder) void {
+    var target = std.zig.CrossTarget{
+        .os_tag = .freestanding,
+        .cpu_arch = .x86_64,
+        .abi = .none,
     };
 
     const mode = b.standardReleaseOptions();
-
-    const kernel = b.addExecutable("kernel.elf", "src/main.zig");
-    kernel.addAssemblyFile("src/start.s");
-    kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
+    const kernel = b.addExecutable("zigotos.elf", "src/main.zig");
+    kernel.setLinkerScriptPath(.{ .path = "src/link.ld" });
+    kernel.code_model = .kernel;
     kernel.setTarget(target);
     kernel.setBuildMode(mode);
-    kernel.code_model = .kernel;
-    kernel.setVerboseLink(true);
     kernel.install();
+    kernel.strip = true;
 
     const kernel_step = b.step("kernel", "Build the kernel");
     kernel_step.dependOn(&kernel.install_step.?.step);
 
-    const iso_dir = b.fmt("{s}/iso_root", .{b.cache_root});
-    const boot_dir = b.fmt("{s}/boot", .{iso_dir});
-    const grub_dir = b.fmt("{s}/grub", .{boot_dir});
+    const iso_dir = b.fmt("{s}/initrd", .{b.cache_root});
+    const iso_out_path = b.fmt("{s}/disk.iso", .{b.exe_dir});
+
     const kernel_path = b.getInstallPath(
         kernel.install_step.?.dest_dir,
         kernel.out_filename,
     );
-    const iso_path = b.fmt("{s}/disk.iso", .{b.exe_dir});
 
     const iso_cmd_str = &[_][]const u8{
         "/bin/sh",
         "-c",
         std.mem.concat(b.allocator, u8, &[_][]const u8{
-            "mkdir -p ",
+            "rm -rf ",
             iso_dir,
             " && ",
             "mkdir -p ",
-            boot_dir,
-            " && ",
-            "mkdir -p ",
-            grub_dir,
+            iso_dir,
             " && ",
             "cp ",
             kernel_path,
             " ",
-            boot_dir,
-            " && ",
-            "cp src/grub.cfg ",
-            grub_dir,
-            " && ",
-            "grub-mkrescue -o ",
-            iso_path,
-            " ",
             iso_dir,
+            " && ",
+            "mkbootimg boot_config.json ",
+            iso_out_path,
         }) catch unreachable,
     };
 
     const iso_cmd = b.addSystemCommand(iso_cmd_str);
     iso_cmd.step.dependOn(kernel_step);
 
-    const iso_step = b.step("iso", "Build an ISO image");
+    const iso_step = b.step("bootable", "Build a bootable disk image");
     iso_step.dependOn(&iso_cmd.step);
     b.default_step.dependOn(iso_step);
 
     const run_cmd_str = &[_][]const u8{
-        "qemu-system-i386",
+        "qemu-system-x86_64",
         "-cdrom",
-        iso_path,
-        "-debugcon",
-        "stdio",
-        "-vga",
-        "virtio",
+        iso_out_path,
         "-m",
         "4G",
     };
@@ -86,4 +67,5 @@ pub fn build(b: *Builder) void {
 
     const run_step = b.step("run", "Run the kernel");
     run_step.dependOn(&run_cmd.step);
+    kernel.strip = true;
 }

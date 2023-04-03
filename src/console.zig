@@ -1,96 +1,82 @@
-const fmt = @import("std").fmt;
-const mem = @import("std").mem;
-const Writer = @import("std").io.Writer;
+const bootboot = @import("bootboot.zig");
 
-const VGA_WIDTH = 80;
-const VGA_HEIGHT = 25;
-const VGA_SIZE = VGA_WIDTH * VGA_HEIGHT;
-
-pub const ConsoleColors = enum(u4) {
-    Black = 0,
-    Blue = 1,
-    Green = 2,
-    Cyan = 3,
-    Red = 4,
-    Magenta = 5,
-    Brown = 6,
-    LightGray = 7,
-    DarkGray = 8,
-    LightBlue = 9,
-    LightGreen = 10,
-    LightCyan = 11,
-    LightRed = 12,
-    LightMagenta = 13,
-    LightBrown = 14,
-    White = 15,
+const PsfHeader = packed struct {
+    magic: u32, // magic bytes to identify PSF
+    version: u32, // zero
+    headersize: u32, // offset of bitmaps in file, 32
+    flags: u32, // 0 if there's no unicode table
+    numglyph: u32, // number of glyphs
+    bytesperglyph: u32, // size of each glyph
+    height: u32, // height in pixels
+    width: u32, // width in pixels
 };
 
-const VgaColor = packed struct {
-    fg: ConsoleColors,
-    bg: ConsoleColors,
-};
-
-const VgaEntry = packed struct {
-    char: u8,
-    color: VgaColor,
-};
-
-var row: usize = 0;
-var column: usize = 0;
-
-pub var color = VgaColor{ .fg = ConsoleColors.White, .bg = ConsoleColors.Black };
-
-var buffer = @intToPtr([*]volatile VgaEntry, 0xb8000);
-
-pub fn initialize() void {
-    clear();
+fn getGlyphs(comptime path: []const u8) Fontspec {
+    const fontEmbedded = @embedFile(path);
+    const header = @bitCast(PsfHeader, fontEmbedded[0..@sizeOf(PsfHeader)].*);
+    if (header.magic != 0x864ab572) unreachable;
+    const bytes_per_line = (header.width + 7) / 8;
+    const gw = header.width;
+    const gh = header.height;
+    var glyphs = fontEmbedded[header.headersize..(header.headersize + header.numglyph * header.bytesperglyph)];
+    return Fontspec{
+        .glyphs = glyphs,
+        .gw = gw,
+        .gh = gh,
+        .bytes_per_line = bytes_per_line,
+        .bytes_per_glyph = header.bytesperglyph,
+        .num_glyphs = header.numglyph,
+    };
 }
 
-pub fn clear() void {
-    const slice = buffer[0..VGA_SIZE];
-    const value = VgaEntry{ .char = ' ', .color = color };
-    for (slice) |*d| {
-        d.* = value;
+const Fontspec = struct {
+    glyphs: []const u8,
+    gw: usize,
+    gh: usize,
+    num_glyphs: usize,
+    bytes_per_glyph: usize,
+    bytes_per_line: usize,
+};
+
+const font = getGlyphs("font.psf");
+
+extern var fb: u8; // frame buffer address pub var framebuffer: []u32 = undefined;
+pub var framebuffer: []u32 = undefined;
+var boot_info: bootboot.BOOTBOOT = undefined;
+var scanline: u32 = undefined;
+
+// init console
+pub fn init() void {
+    boot_info = bootboot.boot_info;
+    framebuffer = @intToPtr([*]u32, @ptrToInt(&fb))[0..boot_info.fb_size];
+    scanline = boot_info.fb_scanline / 4; // fb_scanline is a byte offset. We want 32bits offsets
+}
+
+pub fn putCharAt(x: usize, y: usize, c: u8) void {
+    if (c > 0 and c < font.num_glyphs) {
+        const char_offset = c * font.bytes_per_glyph;
+        var i: usize = 0;
+        var j: usize = undefined;
+        const buf_offset = x + scanline * y;
+        var mask: u8 = undefined;
+        var offset: u32 = 0;
+        while (i < font.gh) : (i += 1) {
+            j = 0;
+            mask = 0x80;
+            while (j < font.gw) : (j += 1) {
+                framebuffer[buf_offset + i * scanline + j] = if (font.glyphs[char_offset + offset] & mask == 0) 0 else 0x00ffffff;
+                mask >>= 1;
+                if (mask == 0) {
+                    offset += 1;
+                    mask = 0x80;
+                }
+            }
+            if (mask != 0x80) offset += 1;
+        }
     }
 }
 
-pub fn putCharAt(c: u8, x: usize, y: usize) void {
-    const index = y * VGA_WIDTH + x;
-    buffer[index] = VgaEntry{ .char = c, .color = color };
-}
-
-pub fn putChar(c: u8) void {
-    switch (c) {
-        '\n' => {
-            newline();
-        },
-        else => {
-            putCharAt(c, column, row);
-            column += 1;
-            if (column == VGA_WIDTH) newline();
-        },
-    }
-}
-
-pub fn puts(data: []const u8) void {
-    for (data) |c|
-        putChar(c);
-}
-
-pub fn newline() void {
-    column = 0;
-    row += 1;
-    if (row == VGA_HEIGHT)
-        row = 0;
-}
-
-pub const writer = Writer(void, error{}, callback){ .context = {} };
-
-fn callback(_: void, string: []const u8) error{}!usize {
-    puts(string);
-    return string.len;
-}
-
-pub fn printf(comptime format: []const u8, args: anytype) void {
-    fmt.format(writer, format, args) catch unreachable;
-}
+const Cursor = struct {
+    x: usize = 0,
+    y: usize = 0,
+};

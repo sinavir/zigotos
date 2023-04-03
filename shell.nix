@@ -4,7 +4,6 @@ pkgs.mkShell {
     pkgs.zig
     pkgs.gdb
     pkgs.qemu
-    pkgs.grub2
-    pkgs.libisoburn
+    (pkgs.callPackage ./nix/bootboot.nix {})
   ];
 }

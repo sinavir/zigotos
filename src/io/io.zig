@@ -19,7 +19,7 @@ pub inline fn out(port: u16, data: anytype) void {
     }
 }
 
-pub fn in(comptime Type: type, port: u16) Type {
+pub inline fn in(comptime Type: type, port: u16) Type {
     return switch (Type) {
         u8 => asm volatile ("inb %[port], %[result]"
             : [result] "={al}" (-> Type),

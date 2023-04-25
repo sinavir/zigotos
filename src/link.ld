@@ -24,5 +24,4 @@ SECTIONS
         *(COMMON)
     } :boot
 
-    /DISCARD/ : { *(.eh_frame) *(.comment) }
 }

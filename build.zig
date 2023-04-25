@@ -14,7 +14,6 @@ pub fn build(b: *std.build.Builder) void {
     kernel.setTarget(target);
     kernel.setBuildMode(mode);
     kernel.install();
-    kernel.strip = true;
 
     const kernel_step = b.step("kernel", "Build the kernel");
     kernel_step.dependOn(&kernel.install_step.?.step);
@@ -61,7 +60,12 @@ pub fn build(b: *std.build.Builder) void {
         "-serial",
         "stdio",
         "-m",
-        "4G",
+        "8G",
+        "-smp",
+        "1",
+        "-d",
+        "int",
+        "-no-reboot",
     };
 
     const run_cmd = b.addSystemCommand(run_cmd_str);

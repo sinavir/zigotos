@@ -46,7 +46,7 @@ pub const MMapEnt = extern struct {
         return self.ptr;
     }
 
-    pub inline fn getSizeInBytes(self: *Self) u64 {
+    pub inline fn getSizeInBytes(self: *const Self) u64 {
         return self.size & 0xFFFFFFFFFFFFFFF0;
     }
 
@@ -54,11 +54,11 @@ pub const MMapEnt = extern struct {
         return self.getSizeInBytes() / 4096;
     }
 
-    pub inline fn getType(self: *Self) MMapType {
+    pub inline fn getType(self: *const Self) MMapType {
         return @intToEnum(MMapType, @truncate(u4, self.size));
     }
 
-    pub inline fn isFree(self: *Self) bool {
+    pub inline fn isFree(self: *const Self) bool {
         return self.getType() == MMapType.MMAP_FREE;
     }
 };
@@ -110,5 +110,8 @@ pub const BOOTBOOT = extern struct {
 pub extern const boot_info: BOOTBOOT;
 pub extern const environment: [4096]u8;
 
-const MMap_size = (boot_info.size - @sizeOf(BOOTBOOT)) / @sizeOf(MMapEnt);
-pub const MMap = @intToPtr([*]MMapEnt, @ptrToInt(&boot_info) + @sizeOf(BOOTBOOT))[0..MMap_size];
+pub var m_map: []MMapEnt = undefined;
+pub fn init_m_map() void {
+    const m_map_size = (boot_info.size - @sizeOf(BOOTBOOT)) / @sizeOf(MMapEnt);
+    m_map = @intToPtr([*]MMapEnt, @ptrToInt(&boot_info) + @sizeOf(BOOTBOOT))[0..m_map_size];
+}

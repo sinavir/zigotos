@@ -7,7 +7,7 @@ stdenv.mkDerivation {
       owner = "bztsrc";
       repo = "bootboot";
       rev = "master";
-      hash = "sha256-+oOwLkqVJSnfsaLx40zStLT1+0WCgpjC1k76C2rSUG4=";
+      hash = "sha256-qC6Q56eXJ5KqvaAS9IpV5FT/KSqDocdihpfJZbdv+S0=";
     };
     filter = path: type: type != "directory" || builtins.elem (builtins.baseNameOf path) [ "mkbootimg" "dist" ];
   };
